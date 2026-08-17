@@ -12,7 +12,7 @@ export interface PickupView { id:number;pos:Vec2;kind:string;owner_id:string|nul
 export interface TelegraphView { id:number;pos:Vec2;radius:number;remaining_ms:number }
 export interface UpgradeChoice { id:number;kind:string;title:string;description:string }
 export interface UpgradeDraft { id:number;choices:UpgradeChoice[];expires_ms:number }
-export interface RuneDraft { id:number;element:Element;form:Form;replacing:string;spell_name:string;description:string;confidence:number }
+export interface RuneDraft { id:number;incantation:string;element:Element;form:Form;spell_name:string;description:string;confidence:number }
 export interface BogMetrics { fold_commits:number;materialized_players:number;materialized_enemies:number;hnsw_queries:number;ese_compiles:number;enemy_counts:[EnemyKind,number][];charms:[CharmKind,number][];top_damage:[string,number][] }
 export interface GameSnapshot { tick:number;phase:Phase;run_id:number;elapsed_ms:number;remaining_ms:number;wave:number;wave_label:string;join_url:string;connected_players:number;you:string|null;players:PlayerView[];enemies:EnemyView[];projectiles:ProjectileView[];pickups:PickupView[];telegraphs:TelegraphView[];boss_hp:[number,number]|null;upgrade_draft:UpgradeDraft|null;rune_draft:RuneDraft|null;announcement:string|null;metrics:BogMetrics }
 export interface Profile { player_id:string;name:string;skin:Skin }

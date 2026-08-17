@@ -215,9 +215,9 @@ pub struct UpgradeDraft {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuneDraft {
     pub id: u64,
+    pub incantation: String,
     pub element: Element,
     pub form: Form,
-    pub replacing: String,
     pub spell_name: String,
     pub description: String,
     pub confidence: f32,

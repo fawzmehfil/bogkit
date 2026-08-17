@@ -5,6 +5,25 @@ use std::collections::HashMap;
 const DIM: usize = ese::DIMENSIONS;
 type RecipeIndex = Hnsw<f32, Cosine, DIM, 16, 4, 32, 64, 12>;
 
+pub const RUNE_INCANTATIONS: [&str; 16] = [
+    "a burning fire arrow flies straight",
+    "three flames circle like moons",
+    "many homing sparks hunt together",
+    "a searing explosion expands outward",
+    "a glacial spear flies straight",
+    "frozen crystals circle like satellites",
+    "many homing snowflakes seek prey",
+    "a blizzard pulse expands outward",
+    "an electric arrow strikes forward",
+    "lightning sparks circle like a halo",
+    "many homing thunder wisps hunt together",
+    "a thunderclap pulse expands outward",
+    "a poison briar arrow flies straight",
+    "living leaves circle like moons",
+    "many homing seeds seek prey",
+    "a bramble pulse expands outward",
+];
+
 #[derive(Debug, Clone)]
 pub struct CompiledSpell {
     pub element: Element,
@@ -33,13 +52,7 @@ impl SpellCompiler {
         Self { index, recipes }
     }
 
-    pub fn compile(&self, element: Element, form: Form) -> CompiledSpell {
-        let phrase = format!(
-            "{} {} {}",
-            element.label(),
-            form.label(),
-            prototype(element, form)
-        );
+    pub fn compile(&self, phrase: &str) -> CompiledSpell {
         let vector = ese::encode_single(phrase);
         let (distance, node) = self
             .index
@@ -104,14 +117,13 @@ fn description(element: Element, form: Form) -> &'static str {
 mod tests {
     use super::*;
     #[test]
-    fn all_visible_pairs_compile_predictably() {
+    fn incantations_compile_to_all_sixteen_spells() {
         let compiler = SpellCompiler::new();
-        for element in Element::ALL {
-            for form in Form::ALL {
-                let spell = compiler.compile(element, form);
-                assert_eq!((spell.element, spell.form), (element, form));
-                assert!(spell.confidence > 0.5);
-            }
+        for (index, phrase) in RUNE_INCANTATIONS.iter().enumerate() {
+            let spell = compiler.compile(phrase);
+            let expected = (Element::ALL[index / 4], Form::ALL[index % 4]);
+            assert_eq!((spell.element, spell.form), expected, "{phrase}");
+            assert!(spell.confidence > 0.1, "{phrase}: {}", spell.confidence);
         }
     }
 }

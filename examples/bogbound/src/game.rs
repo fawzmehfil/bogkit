@@ -1,4 +1,7 @@
-use crate::{model::*, semantic::SpellCompiler};
+use crate::{
+    model::*,
+    semantic::{RUNE_INCANTATIONS, SpellCompiler},
+};
 use anny::{hnsw::Hnsw, metric::L2};
 use std::{
     collections::{HashMap, HashSet},
@@ -166,11 +169,7 @@ struct FriendlyShot {
 }
 enum PickupKind {
     Xp(u32),
-    Rune {
-        owner: String,
-        element: Element,
-        form: Form,
-    },
+    Rune { owner: String, incantation: String },
 }
 struct Pickup {
     id: u64,
@@ -1053,8 +1052,8 @@ impl Game {
             for player_id in self.active_player_ids() {
                 if self.players[&player_id].rune_wave < wave {
                     let rid = self.next_id();
-                    let element = Element::ALL[self.rng.usize(0..4)];
-                    let form = Form::ALL[self.rng.usize(0..4)];
+                    let incantation =
+                        RUNE_INCANTATIONS[self.rng.usize(0..RUNE_INCANTATIONS.len())].to_string();
                     self.pickups.insert(
                         rid,
                         Pickup {
@@ -1062,8 +1061,7 @@ impl Game {
                             pos: enemy.pos,
                             kind: PickupKind::Rune {
                                 owner: player_id,
-                                element,
-                                form,
+                                incantation,
                             },
                             age: 0.0,
                         },
@@ -1157,8 +1155,8 @@ impl Game {
             {
                 match pickup.kind {
                     PickupKind::Xp(value) => self.give_xp(&player_id, value),
-                    PickupKind::Rune { element, form, .. } => {
-                        self.offer_rune(&player_id, id, element, form)
+                    PickupKind::Rune { incantation, .. } => {
+                        self.offer_rune(&player_id, id, incantation)
                     }
                 }
             }
@@ -1219,25 +1217,19 @@ impl Game {
         self.sync_player(id)
     }
 
-    fn offer_rune(&mut self, id: &str, drop_id: u64, element: Element, form: Form) {
-        let Some(p) = self.players.get(id) else {
+    fn offer_rune(&mut self, id: &str, drop_id: u64, incantation: String) {
+        if !self.players.contains_key(id) {
             return;
-        };
-        let replacing = if self.rng.bool() { "element" } else { "form" };
-        let (new_element, new_form) = if replacing == "element" {
-            (element, p.form)
-        } else {
-            (p.element, form)
-        };
-        let spell = self.compiler.compile(new_element, new_form);
+        }
+        let spell = self.compiler.compile(&incantation);
         let wave = self.wave();
         self.ese_compiles += 1;
         if let Some(p) = self.players.get_mut(id) {
             p.pending_rune = Some(RuneDraft {
                 id: drop_id,
+                incantation,
                 element: spell.element,
                 form: spell.form,
-                replacing: replacing.into(),
                 spell_name: spell.name,
                 description: spell.description,
                 confidence: spell.confidence,
@@ -1875,6 +1867,26 @@ mod tests {
         assert_eq!(game.phase, Phase::Lobby);
         assert!(game.enemies.is_empty());
         assert!(game.telegraphs.is_empty());
+    }
+
+    #[test]
+    fn rune_incantation_is_semantically_compiled_before_equip() {
+        let mut game = Game::new("http://test".into());
+        register(&mut game, 1, "solo");
+        game.start_run();
+        game.offer_rune("solo", 77, "frozen crystals circle like satellites".into());
+        let draft = game.players["solo"]
+            .pending_rune
+            .as_ref()
+            .expect("semantic rune draft");
+        assert_eq!(draft.incantation, "frozen crystals circle like satellites");
+        assert_eq!((draft.element, draft.form), (Element::Frost, Form::Orbit));
+        assert_eq!(game.ese_compiles, 1);
+        game.equip_rune("solo", 77);
+        assert_eq!(
+            (game.players["solo"].element, game.players["solo"].form),
+            (Element::Frost, Form::Orbit)
+        );
     }
 
     #[test]

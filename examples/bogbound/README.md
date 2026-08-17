@@ -12,7 +12,7 @@ Every phone or laptop becomes its own viewport into one shared expedition. Move 
 
 - Survive four escalating waves and a final boss, alone or with up to 20 players.
 - Move with WASD, arrow keys, or the phone joystick; attacks aim and fire automatically.
-- Collect XP, choose run-defining blessings, combine word-runes into new spells, and revive nearby teammates.
+- Collect XP, choose run-defining blessings, discover semantic word-runes, and revive nearby teammates.
 - Join late, reconnect safely, or rematch from the shared results screen.
 
 <table>
@@ -32,7 +32,7 @@ Every phone or laptop becomes its own viewport into one shared expedition. Move 
 |---|---|
 | **Fold** | Meaningful keyed facts—health, enemy state, progression, loadouts, damage, and party charms—replace their previous values and incrementally update materialized counts, rankings, and indexes. |
 | **ANNy** | Live 2D HNSW searches select auto-aim targets, enemy aggro, homing and chain targets, loot collection, and nearby teammates for revives. |
-| **ESE** | Static 512-dimensional embeddings interpret each two-word rune recipe locally, then ANNy matches it to one of 16 designed element/form spell behaviors. No model server or internet request is involved. |
+| **ESE** | Static 512-dimensional embeddings interpret mysterious rune phrases locally, then ANNy genuinely determines the nearest of 16 designed element/form spell behaviors. No model server or internet request is involved. |
 
 Fast-changing positions and projectiles stay in the authoritative Rust simulation; meaningful state changes flow through Fold. This keeps the action responsive while making BogKit’s incremental work part of the game rather than a decorative integration. The optional **How Bog Works** panel exposes live commit, materialization, HNSW-query, and spell-compile counters.
 
