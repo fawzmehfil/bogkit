@@ -243,6 +243,18 @@ pub struct BogMetrics {
     pub enemy_counts: Vec<(EnemyKind, i64)>,
     pub charms: Vec<(CharmKind, i64)>,
     pub top_damage: Vec<(String, u64)>,
+    pub party_hp_milli: i64,
+    pub party_max_hp_milli: i64,
+    pub downed_players: i64,
+    pub total_damage: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DirectorView {
+    pub mode: String,
+    pub pressure: u8,
+    pub spawn_interval_ms: u64,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,6 +279,7 @@ pub struct GameSnapshot {
     pub rune_draft: Option<RuneDraft>,
     pub announcement: Option<String>,
     pub metrics: BogMetrics,
+    pub director: DirectorView,
     #[serde(skip)]
     pub private_upgrades: Vec<(String, UpgradeDraft)>,
     #[serde(skip)]
@@ -296,6 +309,7 @@ impl GameSnapshot {
             rune_draft: None,
             announcement: Some("Choose a traveler and enter the bog".into()),
             metrics: BogMetrics::default(),
+            director: DirectorView::default(),
             private_upgrades: vec![],
             private_runes: vec![],
         }
@@ -317,6 +331,7 @@ pub enum Fact {
     Player {
         id: String,
         hp_milli: i64,
+        max_hp_milli: i64,
         level: u32,
         downed: bool,
     },

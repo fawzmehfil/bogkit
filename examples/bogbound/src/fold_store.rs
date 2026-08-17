@@ -79,6 +79,50 @@ macro_rules! bog_stream {
                         { ese::DIMENSIONS },
                     >::new("loadout_hnsw", anny::metric::Cosine, 0xb06),
                 ),
+                (
+                    fold::pipeline::FilterMap::new(
+                        |d: &fold::pipeline::Keyed<$crate::model::FactKey, $crate::model::Fact>| {
+                            match &d.val {
+                                $crate::model::Fact::Player {
+                                    hp_milli,
+                                    max_hp_milli,
+                                    downed,
+                                    ..
+                                } => Some(fold::pipeline::Keyed::new(
+                                    0_u8,
+                                    [*hp_milli, *max_hp_milli, i64::from(*downed)],
+                                )),
+                                _ => None,
+                            }
+                        },
+                        fold::pipeline::Aggregate::new(
+                            "director_party_aggregate",
+                            |acc: &mut [i64; 3], value: &[i64; 3], delta| {
+                                for index in 0..3 {
+                                    acc[index] += value[index] * delta as i64;
+                                }
+                            },
+                            fold::pipeline::terminal::Table::new("director_party"),
+                        ),
+                    ),
+                    fold::pipeline::FilterMap::new(
+                        |d: &fold::pipeline::Keyed<$crate::model::FactKey, $crate::model::Fact>| {
+                            match &d.val {
+                                $crate::model::Fact::Damage { total, .. } => {
+                                    Some(fold::pipeline::Keyed::new(0_u8, *total))
+                                }
+                                _ => None,
+                            }
+                        },
+                        fold::pipeline::Aggregate::new(
+                            "director_damage_aggregate",
+                            |acc: &mut i64, value: &u64, delta| {
+                                *acc += *value as i64 * delta as i64
+                            },
+                            fold::pipeline::terminal::Table::new("director_damage"),
+                        ),
+                    ),
+                ),
             ),
         )
     }};
@@ -88,7 +132,15 @@ macro_rules! bog_stream {
 macro_rules! read_bog_metrics {
     ($stream:expr, $commits:expr, $queries:expr, $compiles:expr) => {{
         $stream.rtx(
-            |(_, players, (enemies, enemy_counts), damage, charms, loadouts)| {
+            |(
+                _,
+                players,
+                (enemies, enemy_counts),
+                damage,
+                charms,
+                loadouts,
+                (party, total_damage),
+            )| {
                 let mut enemy_counts: Vec<($crate::model::EnemyKind, i64)> =
                     enemy_counts.iter().collect();
                 enemy_counts.sort_by_key(|(kind, _)| match kind {
@@ -110,6 +162,7 @@ macro_rules! read_bog_metrics {
                     .map(|row| (row.val, row.score))
                     .collect();
                 let _indexed_loadouts = loadouts.len();
+                let party = party.get(&0_u8).unwrap_or([0, 0, 0]);
                 $crate::model::BogMetrics {
                     fold_commits: $commits,
                     materialized_players: players.get(),
@@ -119,6 +172,10 @@ macro_rules! read_bog_metrics {
                     enemy_counts,
                     charms: charm_rows,
                     top_damage,
+                    party_hp_milli: party[0],
+                    party_max_hp_milli: party[1],
+                    downed_players: party[2],
+                    total_damage: total_damage.get(&0_u8).unwrap_or(0).max(0) as u64,
                 }
             },
         )

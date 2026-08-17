@@ -220,6 +220,7 @@ struct Game {
     fold_commits: u64,
     hnsw_queries: u64,
     ese_compiles: u64,
+    director: DirectorView,
 }
 
 impl Game {
@@ -256,6 +257,12 @@ impl Game {
             fold_commits: 0,
             hnsw_queries: 0,
             ese_compiles: 0,
+            director: DirectorView {
+                mode: "Steady".into(),
+                pressure: 50,
+                spawn_interval_ms: 500,
+                reason: "Waiting for Fold materialization".into(),
+            },
         }
     }
 
@@ -370,6 +377,12 @@ impl Game {
         self.pickups.clear();
         self.telegraphs.clear();
         self.spawn_cd = 0.0;
+        self.director = DirectorView {
+            mode: "Steady".into(),
+            pressure: 50,
+            spawn_interval_ms: 500,
+            reason: "Fold is reading the party".into(),
+        };
         self.boss_spawned = false;
         self.boss_slam_cd = 0.0;
         self.boss_volley_cd = 0.0;
@@ -500,17 +513,70 @@ impl Game {
         if self.spawn_cd > 0.0 || self.enemies.len() >= cap || self.wave() == 5 {
             return;
         }
-        self.spawn_cd = (0.62 - self.wave() as f32 * 0.07 - active as f32 * 0.008).max(0.16);
+        self.spawn_cd = (self.director.spawn_interval_ms as f32 / 1000.0).max(0.14);
         let roll = self.rng.u32(0..100);
-        let kind = match self.wave() {
-            1 => EnemyKind::Mireling,
-            2 if roll < 45 => EnemyKind::Midge,
-            3 if roll < 30 => EnemyKind::Spitter,
-            4 if roll < 12 => EnemyKind::Brute,
-            4 if roll < 42 => EnemyKind::Spitter,
+        let kind = match (self.wave(), self.director.mode.as_str()) {
+            (1, _) => EnemyKind::Mireling,
+            (2, "Recovery") if roll < 24 => EnemyKind::Midge,
+            (2, "Onslaught") if roll < 70 => EnemyKind::Midge,
+            (2, _) if roll < 45 => EnemyKind::Midge,
+            (3, "Recovery") if roll < 16 => EnemyKind::Spitter,
+            (3, "Onslaught") if roll < 55 => EnemyKind::Spitter,
+            (3, _) if roll < 30 => EnemyKind::Spitter,
+            (4, "Recovery") if roll < 5 => EnemyKind::Brute,
+            (4, "Recovery") if roll < 24 => EnemyKind::Spitter,
+            (4, "Onslaught") if roll < 25 => EnemyKind::Brute,
+            (4, "Onslaught") if roll < 70 => EnemyKind::Spitter,
+            (4, _) if roll < 12 => EnemyKind::Brute,
+            (4, _) if roll < 42 => EnemyKind::Spitter,
             _ => EnemyKind::Mireling,
         };
         self.spawn_enemy(kind);
+    }
+
+    fn update_director(&mut self, metrics: &BogMetrics) {
+        if self.phase != Phase::Running || self.wave() == 5 {
+            return;
+        }
+        let players = metrics.materialized_players.max(1) as f32;
+        let health = if metrics.party_max_hp_milli > 0 {
+            metrics.party_hp_milli.max(0) as f32 / metrics.party_max_hp_milli as f32
+        } else {
+            1.0
+        };
+        let downed = metrics.downed_players.max(0) as f32 / players;
+        let seconds = (self.elapsed_ms as f32 / 1000.0).max(1.0);
+        let dps_per_player = metrics.total_damage as f32 / seconds / players;
+        let target_dps = 11.0 + self.wave() as f32 * 4.0;
+        let active = metrics.materialized_players.max(1) as usize;
+        let cap = (18 + active * 7 + self.wave() as usize * 12).min(ENEMY_CAP) as f32;
+        let enemy_load = metrics.materialized_enemies.max(0) as f32 / cap.max(1.0);
+        let score = 50.0
+            + (health - 0.65) * 45.0
+            + (dps_per_player / target_dps - 1.0).clamp(-1.0, 1.0) * 18.0
+            - downed * 45.0
+            - (enemy_load - 0.55).max(0.0) * 32.0;
+        let pressure = score.clamp(0.0, 100.0).round() as u8;
+        let (mode, pace) = if pressure < 38 {
+            ("Recovery", 1.42)
+        } else if pressure > 68 {
+            ("Onslaught", 0.72)
+        } else {
+            ("Steady", 1.0)
+        };
+        let base = (0.62 - self.wave() as f32 * 0.07 - players * 0.008).max(0.16);
+        self.director = DirectorView {
+            mode: mode.into(),
+            pressure,
+            spawn_interval_ms: (base * pace * 1000.0) as u64,
+            reason: format!(
+                "Fold: {:.0}% HP · {} down · {:.1} DPS/player · {} enemies",
+                health * 100.0,
+                metrics.downed_players.max(0),
+                dps_per_player,
+                metrics.materialized_enemies.max(0)
+            ),
+        };
     }
 
     fn spawn_enemy(&mut self, kind: EnemyKind) {
@@ -1459,6 +1525,7 @@ impl Game {
                 Fact::Player {
                     id: id.into(),
                     hp_milli: (p.hp * 1000.0) as i64,
+                    max_hp_milli: (p.max_hp * 1000.0) as i64,
                     level: p.level,
                     downed: p.downed,
                 },
@@ -1646,6 +1713,7 @@ impl Game {
             rune_draft: None,
             announcement: self.announcement.clone(),
             metrics,
+            director: self.director.clone(),
             private_upgrades,
             private_runes,
         }
@@ -1724,6 +1792,7 @@ pub fn spawn(join_url: String, db_path: std::path::PathBuf) -> EngineHandle {
                     game.hnsw_queries,
                     game.ese_compiles
                 );
+                game.update_director(&metrics);
                 let _ = state_tx.send(game.snapshot(metrics));
             }
         }
@@ -1809,6 +1878,40 @@ mod tests {
     #[test]
     fn enemy_cap_scales_but_is_bounded() {
         assert!((18 + 20 * 7 + 5 * 12).min(ENEMY_CAP) <= ENEMY_CAP)
+    }
+
+    #[test]
+    fn fold_director_eases_off_and_escalates_from_materialized_state() {
+        let mut game = Game::new("http://test".into());
+        register(&mut game, 1, "one");
+        register(&mut game, 2, "two");
+        game.start_run();
+        game.elapsed_ms = 60_000;
+        let struggling = BogMetrics {
+            materialized_players: 2,
+            materialized_enemies: 70,
+            party_hp_milli: 40_000,
+            party_max_hp_milli: 200_000,
+            downed_players: 1,
+            total_damage: 100,
+            ..BogMetrics::default()
+        };
+        game.update_director(&struggling);
+        assert_eq!(game.director.mode, "Recovery");
+        let recovery_interval = game.director.spawn_interval_ms;
+
+        let dominating = BogMetrics {
+            materialized_players: 2,
+            materialized_enemies: 5,
+            party_hp_milli: 200_000,
+            party_max_hp_milli: 200_000,
+            downed_players: 0,
+            total_damage: 10_000,
+            ..BogMetrics::default()
+        };
+        game.update_director(&dominating);
+        assert_eq!(game.director.mode, "Onslaught");
+        assert!(game.director.spawn_interval_ms < recovery_interval);
     }
 
     #[test]

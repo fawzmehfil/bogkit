@@ -30,11 +30,11 @@ Every phone or laptop becomes its own viewport into one shared expedition. Move 
 
 | Tool | Role in the game |
 |---|---|
-| **Fold** | Meaningful keyed facts—health, enemy state, progression, loadouts, damage, and party charms—replace their previous values and incrementally update materialized counts, rankings, and indexes. |
+| **Fold** | Meaningful keyed facts—health, enemy state, progression, loadouts, damage, and party charms—replace their previous values and incrementally update materialized counts, rankings, and indexes. Its live party-health, DPS, downed-player, and enemy views drive an adaptive director that changes real spawn pace and enemy composition. |
 | **ANNy** | Live 2D HNSW searches select auto-aim targets, enemy aggro, homing and chain targets, loot collection, and nearby teammates for revives. |
 | **ESE** | Static 512-dimensional embeddings interpret mysterious rune phrases locally, then ANNy genuinely determines the nearest of 16 designed element/form spell behaviors. No model server or internet request is involved. |
 
-Fast-changing positions and projectiles stay in the authoritative Rust simulation; meaningful state changes flow through Fold. This keeps the action responsive while making BogKit’s incremental work part of the game rather than a decorative integration. The optional **How Bog Works** panel exposes live commit, materialization, HNSW-query, and spell-compile counters.
+Fast-changing positions and projectiles stay in the authoritative Rust simulation; meaningful state changes flow through Fold. The simulation reads Fold's materialized state back on the next tick, so the adaptive director eases off when a party is struggling and escalates when it is dominating. The optional **How Bog Works** panel exposes the live decision alongside commit, materialization, HNSW-query, and spell-compile counters.
 
 ## Run
 
