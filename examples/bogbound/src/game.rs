@@ -48,6 +48,11 @@ pub enum EngineCommand {
         player_id: String,
         drop_id: u64,
     },
+    CompileRune {
+        player_id: String,
+        drop_id: u64,
+        incantation: String,
+    },
     SalvageRune {
         player_id: String,
         drop_id: u64,
@@ -1316,6 +1321,7 @@ impl Game {
         let spell = self.compiler.compile(&incantation);
         let wave = self.wave();
         self.ese_compiles += 1;
+        self.hnsw_queries += 1;
         if let Some(p) = self.players.get_mut(id) {
             p.pending_rune = Some(RuneDraft {
                 id: drop_id,
@@ -1327,6 +1333,38 @@ impl Game {
                 confidence: spell.confidence,
             });
             p.rune_wave = wave;
+        }
+    }
+
+    fn compile_rune(&mut self, id: &str, drop_id: u64, incantation: String) {
+        let incantation: String = incantation
+            .trim()
+            .chars()
+            .filter(|character| !character.is_control())
+            .take(72)
+            .collect();
+        if incantation.is_empty()
+            || self
+                .players
+                .get(id)
+                .and_then(|player| player.pending_rune.as_ref())
+                .is_none_or(|draft| draft.id != drop_id)
+        {
+            return;
+        }
+        let spell = self.compiler.compile(&incantation);
+        self.ese_compiles += 1;
+        self.hnsw_queries += 1;
+        if let Some(player) = self.players.get_mut(id) {
+            player.pending_rune = Some(RuneDraft {
+                id: drop_id,
+                incantation,
+                element: spell.element,
+                form: spell.form,
+                spell_name: spell.name,
+                description: spell.description,
+                confidence: spell.confidence,
+            });
         }
     }
 
@@ -1845,6 +1883,11 @@ fn apply_command(game: &mut Game, command: EngineCommand) {
             choice_id,
         } => game.choose_upgrade(&player_id, draft_id, choice_id),
         EngineCommand::EquipRune { player_id, drop_id } => game.equip_rune(&player_id, drop_id),
+        EngineCommand::CompileRune {
+            player_id,
+            drop_id,
+            incantation,
+        } => game.compile_rune(&player_id, drop_id, incantation),
         EngineCommand::SalvageRune { player_id, drop_id } => game.salvage_rune(&player_id, drop_id),
         EngineCommand::Rematch => game.rematch(),
     }
@@ -2011,10 +2054,20 @@ mod tests {
         assert_eq!(draft.incantation, "frozen crystals circle like satellites");
         assert_eq!((draft.element, draft.form), (Element::Frost, Form::Orbit));
         assert_eq!(game.ese_compiles, 1);
+        assert_eq!(game.hnsw_queries, 1);
+        game.compile_rune("solo", 77, "a burning swarm of homing fire birds".into());
+        let custom = game.players["solo"]
+            .pending_rune
+            .as_ref()
+            .expect("custom rune draft");
+        assert_eq!(custom.incantation, "a burning swarm of homing fire birds");
+        assert_eq!((custom.element, custom.form), (Element::Ember, Form::Swarm));
+        assert_eq!(game.ese_compiles, 2);
+        assert_eq!(game.hnsw_queries, 2);
         game.equip_rune("solo", 77);
         assert_eq!(
             (game.players["solo"].element, game.players["solo"].form),
-            (Element::Frost, Form::Orbit)
+            (Element::Ember, Form::Swarm)
         );
     }
 

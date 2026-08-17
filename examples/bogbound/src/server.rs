@@ -58,6 +58,11 @@ enum ClientMessage {
         player_id: String,
         drop_id: u64,
     },
+    CompileRune {
+        player_id: String,
+        drop_id: u64,
+        incantation: String,
+    },
     SalvageRune {
         player_id: String,
         drop_id: u64,
@@ -130,7 +135,7 @@ async fn handle_socket(mut socket: WebSocket, engine: EngineHandle, connection_i
         return;
     }
     loop {
-        tokio::select! {changed=snapshots.changed()=>{if changed.is_err(){break}let json=personalize(snapshots.borrow_and_update().clone(),player_id.as_deref());if socket.send(Message::Text(json.into())).await.is_err(){break}},incoming=socket.recv()=>{let Some(Ok(Message::Text(text)))=incoming else{break};let Ok(message)=serde_json::from_str::<ClientMessage>(&text)else{continue};let command=match message{ClientMessage::Register{player_id:id,name,skin}=>{player_id=Some(id.clone());EngineCommand::Register{connection_id,player_id:id,name,skin}},ClientMessage::SelectSkin{player_id,skin}=>EngineCommand::SelectSkin{player_id,skin},ClientMessage::Input{player_id,sequence,axis_x,axis_y}=>EngineCommand::Input{connection_id,player_id,sequence,x:axis_x,y:axis_y},ClientMessage::StartRun=>EngineCommand::StartRun,ClientMessage::ChooseUpgrade{player_id,draft_id,choice_id}=>EngineCommand::ChooseUpgrade{player_id,draft_id,choice_id},ClientMessage::EquipRune{player_id,drop_id}=>EngineCommand::EquipRune{player_id,drop_id},ClientMessage::SalvageRune{player_id,drop_id}=>EngineCommand::SalvageRune{player_id,drop_id},ClientMessage::Rematch=>EngineCommand::Rematch};if engine.commands.send(command).is_err(){break}}}
+        tokio::select! {changed=snapshots.changed()=>{if changed.is_err(){break}let json=personalize(snapshots.borrow_and_update().clone(),player_id.as_deref());if socket.send(Message::Text(json.into())).await.is_err(){break}},incoming=socket.recv()=>{let Some(Ok(Message::Text(text)))=incoming else{break};let Ok(message)=serde_json::from_str::<ClientMessage>(&text)else{continue};let command=match message{ClientMessage::Register{player_id:id,name,skin}=>{player_id=Some(id.clone());EngineCommand::Register{connection_id,player_id:id,name,skin}},ClientMessage::SelectSkin{player_id,skin}=>EngineCommand::SelectSkin{player_id,skin},ClientMessage::Input{player_id,sequence,axis_x,axis_y}=>EngineCommand::Input{connection_id,player_id,sequence,x:axis_x,y:axis_y},ClientMessage::StartRun=>EngineCommand::StartRun,ClientMessage::ChooseUpgrade{player_id,draft_id,choice_id}=>EngineCommand::ChooseUpgrade{player_id,draft_id,choice_id},ClientMessage::EquipRune{player_id,drop_id}=>EngineCommand::EquipRune{player_id,drop_id},ClientMessage::CompileRune{player_id,drop_id,incantation}=>EngineCommand::CompileRune{player_id,drop_id,incantation},ClientMessage::SalvageRune{player_id,drop_id}=>EngineCommand::SalvageRune{player_id,drop_id},ClientMessage::Rematch=>EngineCommand::Rematch};if engine.commands.send(command).is_err(){break}}}
     }
     let _ = engine
         .commands
