@@ -4,3 +4,4 @@
 .hud-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .world-loading{position:absolute;inset:0;display:grid;place-items:center;background:#14261d;color:#e8ce72;font:10px "Press Start 2P"}
 .incantation{margin:18px auto 8px;color:#79d0bc;font-size:18px;font-style:italic}.semantic-path{display:block;color:#e6c969;font:7px "Press Start 2P";letter-spacing:1px;margin-bottom:20px}
+.boss-pointer{position:absolute;z-index:11;top:88px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;color:#ffe079;background:rgba(41,24,27,.9);border:2px solid #0a1110;padding:6px 10px;pointer-events:none}.boss-pointer span{display:block;font-size:22px;line-height:1;transform-origin:center}.boss-pointer small{font:6px "Press Start 2P";white-space:nowrap}

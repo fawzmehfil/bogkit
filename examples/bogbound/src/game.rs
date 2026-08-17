@@ -284,7 +284,7 @@ impl Game {
             2 => "Wave II · Winged Tide",
             3 => "Wave III · Spitters",
             4 => "Wave IV · Brute Bloom",
-            _ => "BOSS · Fen Colossus",
+            _ => "BOSS · KILL THE FEN COLOSSUS",
         }
         .into()
     }
@@ -453,7 +453,7 @@ impl Game {
             self.spawn_boss();
         }
         if self.elapsed_ms >= 300_000 {
-            self.finish(Phase::Defeat, "THE FEN SWALLOWS THE ISLAND");
+            self.finish(Phase::Defeat, "TIME EXPIRED · THE FEN SWALLOWS THE ISLAND");
             return;
         }
 
@@ -581,7 +581,7 @@ impl Game {
         self.boss_slam_cd = 2.4;
         self.boss_volley_cd = 4.0;
         self.boss_summon_cd = 7.0;
-        self.announcement = Some("THE FEN COLOSSUS RISES".into());
+        self.announcement = Some("THE FEN COLOSSUS RISES · KILL IT BEFORE 0:00".into());
         self.announcement_ttl = 4.0;
     }
 
@@ -725,6 +725,14 @@ impl Game {
             return;
         }
         let (index, map) = self.build_enemy_index();
+        let boss_target = if self.wave() == 5 {
+            self.enemies
+                .values()
+                .find(|enemy| enemy.kind == EnemyKind::Colossus)
+                .map(|enemy| enemy.id)
+        } else {
+            None
+        };
         let ids = self.active_player_ids();
         for player_id in ids {
             let Some(p) = self.players.get(&player_id) else {
@@ -733,9 +741,15 @@ impl Game {
             if p.downed || p.attack_cd > 0.0 {
                 continue;
             }
-            self.hnsw_queries += 1;
-            let hits = index.search(&[p.pos.x, p.pos.y]);
-            let target = hits.into_iter().find_map(|(_, n)| map.get(&n).copied());
+            let target = if let Some(boss) = boss_target {
+                Some(boss)
+            } else {
+                self.hnsw_queries += 1;
+                index
+                    .search(&[p.pos.x, p.pos.y])
+                    .into_iter()
+                    .find_map(|(_, n)| map.get(&n).copied())
+            };
             let Some(target_id) = target else { continue };
             let target_pos = self.enemies[&target_id].pos;
             let (form, element, pos, damage, cooldown) = (
@@ -901,18 +915,30 @@ impl Game {
 
     fn update_projectiles(&mut self, dt: f32) {
         let (enemy_index, enemy_map) = self.build_enemy_index();
+        let boss_pos = if self.wave() == 5 {
+            self.enemies
+                .values()
+                .find(|enemy| enemy.kind == EnemyKind::Colossus)
+                .map(|enemy| enemy.pos)
+        } else {
+            None
+        };
         let ids: Vec<u64> = self.projectiles.keys().copied().collect();
         for id in ids {
             let homing_target = self.projectiles.get(&id).and_then(|projectile| {
                 if projectile.hostile || !projectile.homing {
                     return None;
                 }
-                self.hnsw_queries += 1;
-                enemy_index
-                    .search(&[projectile.pos.x, projectile.pos.y])
-                    .into_iter()
-                    .find_map(|(_, node)| enemy_map.get(&node).copied())
-                    .and_then(|enemy_id| self.enemies.get(&enemy_id).map(|enemy| enemy.pos))
+                if let Some(target) = boss_pos {
+                    Some(target)
+                } else {
+                    self.hnsw_queries += 1;
+                    enemy_index
+                        .search(&[projectile.pos.x, projectile.pos.y])
+                        .into_iter()
+                        .find_map(|(_, node)| enemy_map.get(&node).copied())
+                        .and_then(|enemy_id| self.enemies.get(&enemy_id).map(|enemy| enemy.pos))
+                }
             });
             let mut remove = false;
             let mut hit_enemy = None;
@@ -1903,6 +1929,33 @@ mod tests {
         assert_eq!(game.projectiles.len(), 12);
         assert_eq!(game.enemies.len(), 7);
         assert!(game.enemies.len() <= ENEMY_CAP);
+    }
+
+    #[test]
+    fn final_wave_auto_target_prioritizes_the_boss() {
+        let mut game = Game::new("http://test".into());
+        register(&mut game, 1, "solo");
+        game.start_run();
+        game.elapsed_ms = 200_000;
+        game.spawn_boss();
+        let boss = game
+            .enemies
+            .values()
+            .find(|enemy| enemy.kind == EnemyKind::Colossus)
+            .expect("boss")
+            .id;
+        game.players.get_mut("solo").expect("solo").pos = Vec2::new(800.0, 800.0);
+        game.players.get_mut("solo").expect("solo").attack_cd = 0.0;
+        game.enemies.get_mut(&boss).expect("boss").pos = Vec2::new(1000.0, 800.0);
+        game.spawn_enemy_at(EnemyKind::Mireling, Vec2::new(800.0, 820.0));
+        game.update_combat(0.05);
+        let shot = game
+            .projectiles
+            .values()
+            .find(|projectile| projectile.owner.as_deref() == Some("solo"))
+            .expect("friendly shot");
+        assert!(shot.vel.x > 300.0);
+        assert!(shot.vel.y.abs() < 1.0);
     }
 
     #[test]
